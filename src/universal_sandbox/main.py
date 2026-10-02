@@ -3,6 +3,53 @@ import click
 import sys
 import os
 import subprocess
+import platform
+
+
+def ensure_docker():
+    """Checks if Docker is running. Opens it if closed, or exits if missing."""
+    # 1. Check if Docker daemon is already active and responding
+    try:
+        client = docker.from_env()
+        client.ping()
+        return
+    except (docker.errors.DockerException, Exception):
+        pass
+
+    os_name = platform.system()
+    
+    # 2. Check if Docker is installed on the machine at all
+    try:
+        subprocess.run(["docker", "--version"], capture_output=True, check=True, text=True)
+        is_installed = True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        is_installed = False
+
+    # 3. If missing, exit with a clear message
+    if not is_installed:
+        click.echo("\n[x] Error: Docker is not installed.")
+        click.echo("[!] Universal Sandbox requires Docker to run the isolated Linux environment.")
+        click.echo("[->] Please install Docker (or OrbStack on macOS) and try again.\n")
+        sys.exit(1)
+
+    # 4. If installed but closed, attempt to open it
+    click.echo("[*] Docker is installed but not running. Launching Docker...")
+    
+    try:
+        if os_name == "Darwin":
+            subprocess.run(["open", "-a", "Docker"], check=True)
+        elif os_name == "Windows":
+            subprocess.run(["start", "docker"], shell=True, check=True)
+        elif os_name == "Linux":
+            subprocess.run(["sudo", "systemctl", "start", "docker"], check=True)
+        
+        click.echo("[*] Please wait a few seconds for Docker to boot up, then re-run your command.")
+        sys.exit(0)
+    except Exception as e:
+        click.echo(f"[!] Could not launch Docker automatically: {e}")
+        click.echo("[->] Please open Docker manually and try again.")
+        sys.exit(1)
+
 
 class SandboxManager:
     def __init__(self, image="iamsiddhu3007/universal-sandbox:latest"):
@@ -46,6 +93,7 @@ class SandboxManager:
 @click.argument('command', nargs=-1, type=click.UNPROCESSED)
 def main(command):
     """Run commands inside the universal AI sandbox, or boot into it interactively."""
+    ensure_docker()
     manager = SandboxManager()
     
     try:
